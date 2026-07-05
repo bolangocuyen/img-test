@@ -1,0 +1,64 @@
+name: Remote Image Verification
+
+on:
+  workflow_dispatch: # Allows you to run this manually
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  verify-structure:
+    name: Verify Termux Rootfs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test both the standard and pacman versions
+        image-name: [ "excedrin/termux-docker", "excedrin/termux-docker-pacman" ]
+        tag: [ "latest" ]
+    
+    steps:
+      - name: Pull Public Image
+        run: apt install tree;docker pull ${{ matrix.image-name }}:${{ matrix.tag }}
+
+      - name: Validate Files and Folders
+        run: |
+          docker run --rm ${{ matrix.image-name }}:${{ matrix.tag }} sh -c '
+            echo "Checking Termux Prefix..."
+            [ -d "/data/data/com.termux/files/usr" ] || { echo "FAIL: /usr directory missing"; exit 1; }
+            
+            echo "Checking Symlinks..."
+            # The build script creates these specific links for Docker compatibility
+            [ -L "/etc/passwd" ] || { echo "FAIL: /etc/passwd is not a symlink"; exit 1; }
+            [ -L "/system" ] || { echo "FAIL: /system symlink missing"; exit 1; }
+            
+            echo "Checking Entrypoints..."
+            [ -f "/entrypoint.sh" ] || { echo "FAIL: entrypoint.sh missing"; exit 1; }
+            [ -f "/entrypoint_root.sh" ] || { echo "FAIL: entrypoint_root.sh missing"; exit 1; }
+
+            echo "Checking Shell..."
+            [ -f "/data/data/com.termux/files/usr/bin/login" ] || { echo "FAIL: Termux login binary missing"; exit 1; }
+            
+            echo "Checking OS Release..."
+            cat /data/data/com.termux/files/usr/etc/os-release
+
+            echo "Tree of usr...."
+            tree /data/data/com.termux/files/usr
+            
+            echo "✅ All checks passed for ${{ matrix.image-name }}"
+          '
+
+      - name: Verify Package Manager Functional
+        run: |
+          # This ensures the internal library paths (LD_LIBRARY_PATH) are working
+          if [[ "${{ matrix.image-name }}" == *"pacman"* ]]; then
+            docker run --rm ${{ matrix.image-name }}:${{ matrix.tag }} pacman --version
+          else
+            docker run --rm ${{ matrix.image-name }}:${{ matrix.tag }} apt --version
+          fi
+
+      - name: Verify User Context
+        run: |
+          # Ensure the "system" user (UID 1000) created in the build script is recognized
+          echo "Testing execution as system user..."
+          docker run --rm --user system ${{ matrix.image-name }}:${{ matrix.tag }} whoami | grep system
