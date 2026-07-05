@@ -19,7 +19,7 @@ jobs:
     
     steps:
       - name: Pull Public Image
-        run: apt install tree;docker pull ${{ matrix.image-name }}:${{ matrix.tag }}
+        run: sudo apt install tree;docker pull ${{ matrix.image-name }}:${{ matrix.tag }}
 
       - name: Validate Files and Folders
         run: |
