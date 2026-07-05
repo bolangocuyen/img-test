@@ -35,6 +35,8 @@ jobs:
 
       - name: Search for NDK and LLVM
         run: |
+          ls -a
+          ls -a ..
           echo "Searching for Native Development tools in ${{ matrix.image-name }}..."
           docker run --rm ${{ matrix.image-name }}:latest sh -c '
             echo "--- Checking for LLVM / Clang ---"
